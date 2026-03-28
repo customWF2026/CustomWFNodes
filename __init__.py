@@ -165,21 +165,58 @@ class SDXS1BClipTextEncode:
             "required": {
                 "clip": ("SDXS_CLIP",),
                 "text": ("STRING", {"multiline": True, "default": ""}),
+                "refine_prompt": ("BOOLEAN", {"default": False}),
             }
         }
 
-    RETURN_TYPES = ("SDXS_COND",)
-    RETURN_NAMES = ("conditioning",)
+    RETURN_TYPES = ("SDXS_COND", "STRING")
+    RETURN_NAMES = ("conditioning", "prompt_used")
     FUNCTION = "encode"
+    OUTPUT_NODE = False
     CATEGORY = "SDXS-1B"
 
-    def encode(self, clip, text):
+    def _refine(self, text, text_encoder, tokenizer, device):
+        sys_msg = (
+            "You are a skilled text-to-image prompt engineer whose sole function "
+            "is to transform the user's input into an aesthetically optimized, "
+            "detailed, and visually descriptive three-sentence output. "
+            "**The primary subject (e.g., 'girl', 'dog', 'house') MUST be the "
+            "main focus of the revised prompt and MUST be described in rich detail "
+            "within the first sentence or two.** "
+            "Output **only** the final revised prompt, with absolutely no "
+            "commentary.\n Don't use cliches like warm,soft,vibrant, wildflowers. "
+            "Be creative. User input prompt: "
+        )
+        messages = [
+            {"role": "user", "content": [{"type": "text", "text": sys_msg + text}]}
+        ]
+        inputs = tokenizer.apply_chat_template(
+            messages,
+            tokenize=True,
+            add_generation_prompt=True,
+            return_dict=True,
+            return_tensors="pt",
+        ).to(device)
+
+        generated_ids = text_encoder.generate(
+            **inputs, max_new_tokens=248, do_sample=True, temperature=0.7
+        )
+        trimmed = generated_ids[0][inputs.input_ids.shape[1] :]
+        refined = tokenizer.decode(trimmed, skip_special_tokens=True, clean_up_tokenization_spaces=False)
+        print(f"[SDXS-1B] Refined prompt: {refined}")
+        return refined
+
+    def encode(self, clip, text, refine_prompt):
         text_encoder = clip["text_encoder"]
         tokenizer = clip["tokenizer"]
         device = clip["device"]
 
+        prompt_used = text
+        if refine_prompt:
+            prompt_used = self._refine(text, text_encoder, tokenizer, device)
+
         # Chat template formatting (from pipeline_sdxs.py)
-        messages = [{"role": "user", "content": [{"type": "text", "text": text}]}]
+        messages = [{"role": "user", "content": [{"type": "text", "text": prompt_used}]}]
         formatted = tokenizer.apply_chat_template(
             messages, add_generation_prompt=True, tokenize=False
         )
@@ -218,6 +255,7 @@ class SDXS1BClipTextEncode:
                 "encoder_hidden_states": encoder_hidden_states,
                 "encoder_attention_mask": attention_mask,
             },
+            prompt_used,
         )
 
 

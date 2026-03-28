@@ -1,6 +1,6 @@
 {
-  "last_node_id": 8,
-  "last_link_id": 8,
+  "last_node_id": 10,
+  "last_link_id": 11,
   "nodes": [
     {
       "id": 1,
@@ -51,7 +51,7 @@
       "id": 4,
       "type": "SDXS1BClipTextEncode",
       "pos": [490, 100],
-      "size": {"0": 400, "1": 200},
+      "size": {"0": 400, "1": 230},
       "flags": {},
       "order": 3,
       "mode": 0,
@@ -59,17 +59,18 @@
         {"name": "clip", "type": "SDXS_CLIP", "link": 2}
       ],
       "outputs": [
-        {"name": "conditioning", "type": "SDXS_COND", "links": [4], "slot_index": 0, "shape": 3}
+        {"name": "conditioning", "type": "SDXS_COND", "links": [4], "slot_index": 0, "shape": 3},
+        {"name": "prompt_used", "type": "STRING", "links": [9], "slot_index": 1, "shape": 3}
       ],
       "properties": {"Node name for S&R": "SDXS1BClipTextEncode"},
-      "widgets_values": ["girl, smiling, red eyes, blue hair, white shirt"],
+      "widgets_values": ["girl, smiling, red eyes, blue hair, white shirt", true],
       "_meta": {"title": "SDXS-1B Qwen Text Encode (Positive)"}
     },
     {
       "id": 5,
       "type": "SDXS1BClipTextEncode",
-      "pos": [490, 360],
-      "size": {"0": 400, "1": 200},
+      "pos": [490, 400],
+      "size": {"0": 400, "1": 230},
       "flags": {},
       "order": 4,
       "mode": 0,
@@ -77,10 +78,11 @@
         {"name": "clip", "type": "SDXS_CLIP", "link": 3}
       ],
       "outputs": [
-        {"name": "conditioning", "type": "SDXS_COND", "links": [5], "slot_index": 0, "shape": 3}
+        {"name": "conditioning", "type": "SDXS_COND", "links": [5], "slot_index": 0, "shape": 3},
+        {"name": "prompt_used", "type": "STRING", "links": null, "slot_index": 1, "shape": 3}
       ],
       "properties": {"Node name for S&R": "SDXS1BClipTextEncode"},
-      "widgets_values": ["low quality, blurry, distorted"],
+      "widgets_values": ["low quality, blurry, distorted", false],
       "_meta": {"title": "SDXS-1B Qwen Text Encode (Negative)"}
     },
     {
@@ -134,6 +136,23 @@
       ],
       "properties": {"Node name for S&R": "PreviewImage"},
       "_meta": {"title": "Preview Image"}
+    },
+    {
+      "id": 9,
+      "type": "ShowText|pysssss",
+      "pos": [490, 690],
+      "size": {"0": 400, "1": 200},
+      "flags": {},
+      "order": 8,
+      "mode": 0,
+      "inputs": [
+        {"name": "text", "type": "STRING", "link": 9}
+      ],
+      "outputs": [
+        {"name": "STRING", "type": "STRING", "links": null, "shape": 3}
+      ],
+      "properties": {"Node name for S&R": "ShowText|pysssss"},
+      "_meta": {"title": "Refined Prompt Preview"}
     }
   ],
   "links": [
@@ -144,7 +163,8 @@
     [5, 5, 0, 6, 2, "SDXS_COND"],
     [6, 3, 0, 7, 1, "SDXS_VAE"],
     [7, 6, 0, 7, 0, "SDXS_LATENT"],
-    [8, 7, 0, 8, 0, "IMAGE"]
+    [8, 7, 0, 8, 0, "IMAGE"],
+    [9, 4, 1, 9, 0, "STRING"]
   ],
   "groups": [],
   "config": {},
