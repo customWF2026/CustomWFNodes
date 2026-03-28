@@ -118,12 +118,14 @@ class SDXS1BUnetLoader:
     def load(self, model_name, dtype):
         cached = _load_pipeline(model_name, dtype)
         pipe = cached["pipe"]
+        vae_scale_factor = 2 ** (len(pipe.vae.config.block_out_channels) - 1)
         return (
             {
                 "unet": pipe.unet,
                 "scheduler": pipe.scheduler,
                 "device": cached["device"],
                 "dtype": cached["dtype"],
+                "vae_scale_factor": vae_scale_factor,
             },
         )
 
@@ -146,7 +148,14 @@ class SDXS1BVAELoader:
     def load(self, model_name, dtype):
         cached = _load_pipeline(model_name, dtype)
         pipe = cached["pipe"]
-        return ({"vae": pipe.vae},)
+        # Per-channel latent normalization (from pipeline_sdxs.py)
+        mean = getattr(pipe.vae.config, "latents_mean", None)
+        std = getattr(pipe.vae.config, "latents_std", None)
+        vae_data = {"vae": pipe.vae}
+        if mean is not None and std is not None:
+            vae_data["latents_mean"] = torch.tensor(mean).view(1, len(mean), 1, 1)
+            vae_data["latents_std"] = torch.tensor(std).view(1, len(std), 1, 1)
+        return (vae_data,)
 
 
 class SDXS1BClipTextEncode:
@@ -250,10 +259,9 @@ class SDXS1BSampler:
 
         generator = torch.Generator(device="cpu").manual_seed(seed)
 
-        # Asymmetric VAE: 8x encoder, 16x decoder (32 latent channels)
-        # UNet operates at 1/16th spatial resolution
-        latent_h = height // 16
-        latent_w = width // 16
+        vae_scale_factor = model["vae_scale_factor"]
+        latent_h = height // vae_scale_factor
+        latent_w = width // vae_scale_factor
         in_channels = unet.config.in_channels
 
         latents = torch.randn(
@@ -327,11 +335,17 @@ class SDXS1BVAEDecode:
         samples = latent["samples"]
 
         with torch.no_grad():
-            if hasattr(vae_model.config, "scaling_factor"):
+            # Denormalize latents using per-channel mean/std (from pipeline_sdxs.py)
+            if "latents_mean" in vae and "latents_std" in vae:
+                lat_std = vae["latents_std"].to(samples.device, samples.dtype)
+                lat_mean = vae["latents_mean"].to(samples.device, samples.dtype)
+                samples = samples * lat_std + lat_mean
+            elif hasattr(vae_model.config, "scaling_factor"):
                 samples = samples / vae_model.config.scaling_factor
-            image = vae_model.decode(samples, return_dict=False)[0]
 
-        image = (image / 2 + 0.5).clamp(0, 1)
+            image = vae_model.decode(samples.to(vae_model.dtype), return_dict=False)[0]
+
+        image = (image.clamp(-1, 1) + 1) / 2
         # ComfyUI IMAGE format: [B, H, W, C] float32 0-1
         image = image.permute(0, 2, 3, 1).cpu().float()
 
